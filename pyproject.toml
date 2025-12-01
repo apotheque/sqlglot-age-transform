@@ -1,0 +1,21 @@
+[project]
+name = "sqlglot-age-transform"
+version = "0.1.0"
+description = "A Python package that rewrites the AGE() function into the Spark SQL dialect using SQLGlot."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "sqlglot==27.29.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.0",
+    "pytest>=9.0.1",
+    "python-dotenv>=1.2.1",
+    "ruff>=0.14.7",
+]
