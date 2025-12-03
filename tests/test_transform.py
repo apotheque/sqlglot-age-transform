@@ -1,6 +1,6 @@
 import sqlglot
 from sqlglot_age_transform.transform import transform_age
-
+import pytest
 
 import duckdb
 from pyspark.sql import SparkSession
@@ -41,70 +41,50 @@ def test_execution_results():
     assert spark_interval == duck_interval
 
 
-# TODO: add asserts and more test cases
-def test_transform_age_two_args():
-    sql = "SELECT AGE('2025-12-02', '2024-11-01');"
+@pytest.mark.parametrize(
+    "sql, expected_sql",
+    [
+        (
+            "SELECT AGE('2025-12-02', '2024-11-01');",
+            "SELECT MAKE_INTERVAL("
+            "CAST(MONTHS_BETWEEN(CAST('2025-12-02' AS DATE), CAST('2024-11-01' AS DATE)) AS INT) / 12, "
+            "CAST(MONTHS_BETWEEN(CAST('2025-12-02' AS DATE), CAST('2024-11-01' AS DATE)) AS INT) % 12, "
+            "0, "
+            "DATEDIFF(CAST('2025-12-02' AS DATE), "
+            "ADD_MONTHS(CAST('2024-11-01' AS DATE), "
+            "CAST(MONTHS_BETWEEN(CAST('2025-12-02' AS DATE), CAST('2024-11-01' AS DATE)) AS INT))), "
+            "0, 0, 0)",
+        ),
+        (
+            "SELECT AGE('2025-12-02');",
+            "SELECT MAKE_INTERVAL("
+            "CAST(MONTHS_BETWEEN(CAST(CURRENT_TIMESTAMP() AS DATE), CAST('2025-12-02' AS DATE)) AS INT) / 12, "
+            "CAST(MONTHS_BETWEEN(CAST(CURRENT_TIMESTAMP() AS DATE), CAST('2025-12-02' AS DATE)) AS INT) % 12, "
+            "0, "
+            "DATEDIFF(CAST(CURRENT_TIMESTAMP() AS DATE), "
+            "ADD_MONTHS(CAST('2025-12-02' AS DATE), "
+            "CAST(MONTHS_BETWEEN(CAST(CURRENT_TIMESTAMP() AS DATE), CAST('2025-12-02' AS DATE)) AS INT))), "
+            "0, 0, 0)",
+        ),
+        (
+            "SELECT CASE WHEN last_expiration_dt IS NOT NULL "
+            "THEN EXTRACT(YEAR FROM AGE('2024-12-31'::DATE, last_expiration_dt)) "
+            "ELSE NULL END AS airb_eff_maturity_year "
+            "FROM custom_risk_cred_port_lp.t_u_agr_cred;",
+            "MAKE_INTERVAL("
+            "CAST(MONTHS_BETWEEN(CAST('2024-12-31' AS DATE), CAST(last_expiration_dt AS DATE)) AS INT) / 12, "
+            "CAST(MONTHS_BETWEEN(CAST('2024-12-31' AS DATE), CAST(last_expiration_dt AS DATE)) AS INT) % 12, "
+            "0, "
+            "DATEDIFF(CAST('2024-12-31' AS DATE), "
+            "ADD_MONTHS(CAST(last_expiration_dt AS DATE), "
+            "CAST(MONTHS_BETWEEN(CAST('2024-12-31' AS DATE), CAST(last_expiration_dt AS DATE)) AS INT))), "
+            "0, 0, 0)",
+        ),
+    ],
+)
+def test_transform_age(sql: str, expected_sql: str) -> None:
     ast = sqlglot.parse_one(sql, dialect="postgres")
     for node in ast.walk():
         transform_age(node)
     transformed_sql = ast.sql(dialect="spark")
-
-    expected_sql = (
-        "SELECT MAKE_INTERVAL("
-        "CAST(MONTHS_BETWEEN(CAST('2025-12-02' AS DATE), CAST('2024-11-01' AS DATE)) AS INT) / 12, "
-        "CAST(MONTHS_BETWEEN(CAST('2025-12-02' AS DATE), CAST('2024-11-01' AS DATE)) AS INT) % 12, "
-        "0, "
-        "DATEDIFF(CAST('2025-12-02' AS DATE), "
-        "ADD_MONTHS(CAST('2024-11-01' AS DATE), "
-        "CAST(MONTHS_BETWEEN(CAST('2025-12-02' AS DATE), CAST('2024-11-01' AS DATE)) AS INT))), "
-        "0, 0, 0)"
-    )
-    assert transformed_sql == expected_sql
-
-
-def test_transform_age_one_arg():
-    sql = "SELECT AGE('2025-12-02');"
-    ast = sqlglot.parse_one(sql, dialect="postgres")
-    for node in ast.walk():
-        transform_age(node)
-    transformed_sql = ast.sql(dialect="spark")
-
-    expected_sql = (
-        "SELECT MAKE_INTERVAL("
-        "CAST(MONTHS_BETWEEN(CAST(CURRENT_TIMESTAMP() AS DATE), CAST('2025-12-02' AS DATE)) AS INT) / 12, "
-        "CAST(MONTHS_BETWEEN(CAST(CURRENT_TIMESTAMP() AS DATE), CAST('2025-12-02' AS DATE)) AS INT) % 12, "
-        "0, "
-        "DATEDIFF(CAST(CURRENT_TIMESTAMP() AS DATE), "
-        "ADD_MONTHS(CAST('2025-12-02' AS DATE), "
-        "CAST(MONTHS_BETWEEN(CAST(CURRENT_TIMESTAMP() AS DATE), CAST('2025-12-02' AS DATE)) AS INT))), "
-        "0, 0, 0)"
-    )
-
-    assert transformed_sql == expected_sql
-
-
-def test_transform_age():
-    sql = (
-        "SELECT CASE WHEN last_expiration_dt IS NOT NULL "
-        "THEN EXTRACT(YEAR FROM AGE('2024-12-31'::DATE, last_expiration_dt)) "
-        "ELSE NULL END AS airb_eff_maturity_year "
-        "FROM custom_risk_cred_port_lp.t_u_agr_cred;"
-    )
-
-    ast = sqlglot.parse_one(sql, dialect="postgres")
-    for node in ast.walk():
-        transform_age(node)
-    transformed_sql = ast.sql(dialect="spark")
-
-    expected_fragment = (
-        "MAKE_INTERVAL("
-        "CAST(MONTHS_BETWEEN(CAST('2024-12-31' AS DATE), CAST(last_expiration_dt AS DATE)) AS INT) / 12, "
-        "CAST(MONTHS_BETWEEN(CAST('2024-12-31' AS DATE), CAST(last_expiration_dt AS DATE)) AS INT) % 12, "
-        "0, "
-        "DATEDIFF(CAST('2024-12-31' AS DATE), "
-        "ADD_MONTHS(CAST(last_expiration_dt AS DATE), "
-        "CAST(MONTHS_BETWEEN(CAST('2024-12-31' AS DATE), CAST(last_expiration_dt AS DATE)) AS INT))), "
-        "0, 0, 0)"
-    )
-
-    assert expected_fragment in transformed_sql
+    assert expected_sql in transformed_sql
