@@ -6,7 +6,7 @@ def cast_to_date(expr: Expression) -> Expression:
         to_type = expr.args.get("to")
         if isinstance(to_type, exp.DataType) and to_type.this == exp.DataType.Type.DATE:
             return expr
-    return exp.Cast(this=expr, to=exp.DataType.build("DATE"))
+    return exp.Cast(this=expr, to=exp.DataType.build(exp.DataType.Type.DATE))
 
 
 def int_lit(n: int) -> exp.Literal:
@@ -14,12 +14,10 @@ def int_lit(n: int) -> exp.Literal:
 
 
 def transform_age(node: Expression) -> Expression:
-    # TODO: rewrite AGE(x, y) | AGE(x) → equivalent Spark SQL expression
-
     if not isinstance(node, exp.Anonymous):
         return node
 
-    name = node.this
+    name = str(node.this).upper()
     if name != "AGE":
         return node
 
@@ -33,12 +31,9 @@ def transform_age(node: Expression) -> Expression:
         start_date = cast_to_date(args[0])
 
     else:
-        return node
+        raise ValueError(f"AGE expects 1 or 2 arguments, got {len(args)}")
 
-    months_between_expr = exp.Anonymous(
-        this="months_between",
-        expressions=[end_date, start_date],
-    )
+    months_between_expr = exp.func("months_between", end_date, start_date)
     total_months = exp.Cast(
         this=months_between_expr,
         to=exp.DataType.build("INT"),
@@ -54,18 +49,8 @@ def transform_age(node: Expression) -> Expression:
         expression=int_lit(12),
     )
 
-    days = exp.Anonymous(
-        this="datediff",
-        expressions=[
-            end_date,
-            exp.Anonymous(
-                this="add_months",
-                expressions=[
-                    start_date,
-                    total_months.copy(),
-                ],
-            ),
-        ],
+    days = exp.func(
+        "datediff", end_date, exp.func("add_months", start_date, total_months.copy())
     )
 
     zero = int_lit(0)
@@ -74,5 +59,4 @@ def transform_age(node: Expression) -> Expression:
         this="make_interval",
         expressions=[years, months, zero, days, zero, zero, zero],
     )
-    node.replace(replacement)
     return replacement
