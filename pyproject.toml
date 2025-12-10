@@ -5,6 +5,8 @@ description = "A Python package that rewrites the AGE() function into the Spark 
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "duckdb>=1.4.2",
+    "pyspark>=4.0.1",
     "sqlglot==27.29.0",
 ]
 
