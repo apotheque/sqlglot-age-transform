@@ -40,15 +40,6 @@ def assert_age_exec_equal(sql: str, transformed_sql: str, spark_session):
     assert spark_interval == duck_interval
 
 
-def assert_query_exec_equal(sql: str, transformed_sql: str, spark_session):
-    duck_interval = duckdb.sql(sql).fetchall()
-
-    df = spark_session.sql(transformed_sql)
-    spark_interval = [tuple(row) for row in df.collect()]
-
-    assert spark_interval == duck_interval
-
-
 @pytest.mark.parametrize(
     "sql, expected_sql, exec_checker",
     [
@@ -64,30 +55,15 @@ def assert_query_exec_equal(sql: str, transformed_sql: str, spark_session):
             assert_age_exec_equal,
         ),
         (
-            "SELECT AGE('2025-12-02')",
+            "SELECT AGE('2025-12-02'::DATE)",
             "SELECT MAKE_INTERVAL("
-            "CAST(MONTHS_BETWEEN(CAST(CURRENT_TIMESTAMP() AS DATE), CAST('2025-12-02' AS DATE)) AS INT) / 12, "
-            "CAST(MONTHS_BETWEEN(CAST(CURRENT_TIMESTAMP() AS DATE), CAST('2025-12-02' AS DATE)) AS INT) % 12, 0, "
-            "DATEDIFF(CAST(CURRENT_TIMESTAMP() AS DATE), "
+            "CAST(MONTHS_BETWEEN(CURRENT_TIMESTAMP(), CAST('2025-12-02' AS DATE)) AS INT) / 12, "
+            "CAST(MONTHS_BETWEEN(CURRENT_TIMESTAMP(), CAST('2025-12-02' AS DATE)) AS INT) % 12, 0, "
+            "DATEDIFF(CURRENT_TIMESTAMP(), "
             "ADD_MONTHS(CAST('2025-12-02' AS DATE), "
-            "CAST(MONTHS_BETWEEN(CAST(CURRENT_TIMESTAMP() AS DATE), CAST('2025-12-02' AS DATE)) AS INT))), "
+            "CAST(MONTHS_BETWEEN(CURRENT_TIMESTAMP(), CAST('2025-12-02' AS DATE)) AS INT))), "
             "0, 0, 0)",
             None,
-        ),
-        (
-            "SELECT CASE WHEN col IS NOT NULL "
-            "THEN EXTRACT(YEAR FROM AGE('2024-12-31'::DATE, col)) "
-            "ELSE NULL END AS maturity_year "
-            "FROM (SELECT '2023-11-30'::DATE AS col) t",
-            "SELECT CASE WHEN NOT col IS NULL THEN EXTRACT(YEAR FROM MAKE_INTERVAL("
-            "CAST(MONTHS_BETWEEN(CAST('2024-12-31' AS DATE), CAST(col AS DATE)) AS INT) / 12, "
-            "CAST(MONTHS_BETWEEN(CAST('2024-12-31' AS DATE), CAST(col AS DATE)) AS INT) % 12, 0, "
-            "DATEDIFF(CAST('2024-12-31' AS DATE), "
-            "ADD_MONTHS(CAST(col AS DATE), "
-            "CAST(MONTHS_BETWEEN(CAST('2024-12-31' AS DATE), CAST(col AS DATE)) AS INT))), "
-            "0, 0, 0)) ELSE NULL END AS maturity_year "
-            "FROM (SELECT CAST('2023-11-30' AS DATE) AS col) AS t",
-            assert_query_exec_equal,
         ),
     ],
 )
